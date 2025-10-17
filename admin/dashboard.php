@@ -7,7 +7,7 @@ if(!is_logged_in() || !is_admin()) {
     header('Location: ../index.php'); exit;
 }
 
-// Handle service creation
+// --- Handle Service Creation ---
 if(isset($_POST['create_service'])) {
     $name = clean_input($_POST['service_name']);
     $desc = clean_input($_POST['description']);
@@ -18,7 +18,7 @@ if(isset($_POST['create_service'])) {
     $stmt->execute([':name'=>$name, ':desc'=>$desc, ':price'=>$price, ':duration'=>$duration]);
 }
 
-// Handle booking updates (approve, reject, change time)
+// --- Handle Booking Updates ---
 if(isset($_POST['update_booking'])) {
     $id = (int)$_POST['booking_id'];
     $status = clean_input($_POST['status']);
@@ -33,13 +33,32 @@ if(isset($_POST['update_booking'])) {
     }
 }
 
-// Stats
+// --- Handle User Creation ---
+if(isset($_POST['create_user'])){
+    $name = clean_input($_POST['new_name']);
+    $email = clean_input($_POST['new_email']);
+    $password = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
+    $role = in_array($_POST['new_role'], ['admin','customer']) ? $_POST['new_role'] : 'customer';
+
+    $stmt = $db->prepare("INSERT INTO users (name, email, password, role) VALUES (:name, :email, :password, :role)");
+    $stmt->execute([':name'=>$name, ':email'=>$email, ':password'=>$password, ':role'=>$role]);
+}
+
+// --- Handle Password Update ---
+if(isset($_POST['update_password']) && isset($_POST['user_id']) && !empty($_POST['new_password'])){
+    $new_pass = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
+    $uid = (int)$_POST['user_id'];
+    $stmt = $db->prepare("UPDATE users SET password=:password WHERE id=:id");
+    $stmt->execute([':password'=>$new_pass, ':id'=>$uid]);
+}
+
+// --- Fetch Stats ---
 $users_count = $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $bookings_count = $db->query("SELECT COUNT(*) FROM bookings")->fetchColumn();
 $pending_count = $db->query("SELECT COUNT(*) FROM bookings WHERE status='pending'")->fetchColumn();
 $services_count = $db->query("SELECT COUNT(*) FROM services")->fetchColumn();
 
-// Fetch data
+// --- Fetch Data ---
 $recent_bookings = $db->query("SELECT b.*, u.name, s.service_name 
                                FROM bookings b 
                                LEFT JOIN users u ON b.user_id=u.id 
@@ -49,6 +68,7 @@ $recent_bookings = $db->query("SELECT b.*, u.name, s.service_name
 $all_users = $db->query("SELECT * FROM users ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,6 +80,7 @@ $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->f
 </head>
 <body>
 <?php include('../includes/topbar.php'); ?>
+
 <div class="container my-5">
     <h2 class="mb-4 text-center">Admin Dashboard</h2>
 
@@ -84,9 +105,11 @@ $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->f
             <h4>Manage Bookings</h4>
             <div class="table-responsive">
                 <table class="table table-striped table-bordered">
-                    <thead class="table-dark"><tr>
-                        <th>ID</th><th>Customer</th><th>Service</th><th>Car</th><th>Status</th><th>Booking Time</th><th>Actions</th>
-                    </tr></thead>
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th><th>Customer</th><th>Service</th><th>Car</th><th>Status</th><th>Booking Time</th><th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                     <?php foreach($recent_bookings as $b): ?>
                         <tr>
@@ -119,7 +142,6 @@ $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->f
         <!-- Services Tab -->
         <div class="tab-pane fade" id="services">
             <h4>Manage Services</h4>
-            <!-- Create Service Form -->
             <form method="POST" class="mb-4">
                 <div class="row g-2">
                     <div class="col-md-3"><input type="text" name="service_name" class="form-control" placeholder="Service Name" required></div>
@@ -129,12 +151,14 @@ $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->f
                     <div class="col-md-2"><button name="create_service" class="btn btn-success w-100">Add Service</button></div>
                 </div>
             </form>
-            <!-- List Services -->
+
             <div class="table-responsive">
                 <table class="table table-striped table-bordered">
-                    <thead class="table-dark"><tr>
-                        <th>ID</th><th>Name</th><th>Description</th><th>Price</th><th>Duration</th>
-                    </tr></thead>
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th><th>Name</th><th>Description</th><th>Price</th><th>Duration</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php foreach($all_services as $s): ?>
                             <tr>
@@ -152,27 +176,55 @@ $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->f
 
         <!-- Users Tab -->
         <div class="tab-pane fade" id="users">
-            <h4>Users List</h4>
+            <h4>Users Management</h4>
+
+            <!-- Create New User -->
+            <form method="POST" class="mb-4">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3"><input type="text" name="new_name" class="form-control" placeholder="Full Name" required></div>
+                    <div class="col-md-3"><input type="email" name="new_email" class="form-control" placeholder="Email" required></div>
+                    <div class="col-md-2"><input type="password" name="new_password" class="form-control" placeholder="Password" required></div>
+                    <div class="col-md-2">
+                        <select name="new_role" class="form-select" required>
+                            <option value="customer">Customer</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2"><button name="create_user" class="btn btn-success w-100">Add User</button></div>
+                </div>
+            </form>
+
+            <!-- Users Table -->
             <div class="table-responsive">
-                <table class="table table-striped table-bordered">
-                    <thead class="table-dark"><tr>
-                        <th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Registered At</th>
-                    </tr></thead>
+                <table class="table table-striped table-bordered align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Registered At</th><th>Update Password</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php foreach($all_users as $u): ?>
-                            <tr>
-                                <td><?= $u['id'] ?></td>
-                                <td><?= htmlspecialchars($u['name']) ?></td>
-                                <td><?= htmlspecialchars($u['email']) ?></td>
-                                <td><?= htmlspecialchars($u['role']) ?></td>
-                                <td><?= $u['created_at'] ?></td>
-                            </tr>
+                        <tr>
+                            <td><?= $u['id'] ?></td>
+                            <td><?= htmlspecialchars($u['name']) ?></td>
+                            <td><?= htmlspecialchars($u['email']) ?></td>
+                            <td><?= htmlspecialchars($u['role']) ?></td>
+                            <td><?= $u['created_at'] ?></td>
+                            <td>
+                                <form method="POST" class="d-flex gap-1">
+                                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                    <input type="password" name="new_password" class="form-control form-control-sm" placeholder="New Password" required>
+                                    <button name="update_password" class="btn btn-sm btn-primary">Update</button>
+                                </form>
+                            </td>
+                        </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
