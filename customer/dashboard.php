@@ -1,27 +1,23 @@
 <?php
 session_start();
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__.'/../includes/db.php';
+require_once __DIR__.'/../includes/functions.php';
 
-// Only allow logged-in customers
-if (!is_logged_in() || $_SESSION['user']['role'] !== 'customer') {
-    header('Location: ../index.php');
-    exit;
+if(!is_logged_in() || $_SESSION['user']['role']!=='customer'){
+    header('Location: ../index.php'); exit;
 }
 
 $user = $_SESSION['user'];
 $user_id = $user['id'];
 
 // Fetch bookings
-$stmt = $db->prepare("SELECT b.*, s.service_name 
-                      FROM bookings b 
-                      LEFT JOIN services s ON b.service_id = s.id 
-                      WHERE b.user_id=:uid 
-                      ORDER BY b.created_at DESC");
+$stmt = $db->prepare("SELECT b.*, s.service_name FROM bookings b 
+                      LEFT JOIN services s ON b.service_id=s.id 
+                      WHERE b.user_id=:uid ORDER BY b.created_at DESC");
 $stmt->execute([':uid'=>$user_id]);
 $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch available services
+// Fetch services
 $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
@@ -41,28 +37,18 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
       <h3>Your Bookings</h3>
       <div class="table-responsive">
         <table class="table table-striped table-bordered">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Service</th>
-              <th>Car</th>
-              <th>Status</th>
-              <th>Booking Time</th>
-            </tr>
-          </thead>
+          <thead><tr><th>ID</th><th>Service</th><th>Car</th><th>Status</th><th>Time</th></tr></thead>
           <tbody>
-            <?php if($bookings): ?>
-              <?php foreach($bookings as $b): ?>
-                <tr>
-                  <td><?= $b['id'] ?></td>
-                  <td><?= htmlspecialchars($b['service_name']) ?></td>
-                  <td><?= htmlspecialchars($b['car_model']) ?> (<?= htmlspecialchars($b['license_plate']) ?>)</td>
-                  <td><?= htmlspecialchars($b['status']) ?></td>
-                  <td><?= $b['booking_time'] ?></td>
-                </tr>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <tr><td colspan="5">You have no bookings. Use the form to the right to create one.</td></tr>
+            <?php if($bookings): foreach($bookings as $b): ?>
+            <tr>
+              <td><?= $b['id'] ?></td>
+              <td><?= htmlspecialchars($b['service_name']) ?></td>
+              <td><?= htmlspecialchars($b['car_model']) ?> (<?= htmlspecialchars($b['license_plate']) ?>)</td>
+              <td><?= htmlspecialchars($b['status']) ?></td>
+              <td><?= $b['booking_time'] ?></td>
+            </tr>
+            <?php endforeach; else: ?>
+              <tr><td colspan="5">No bookings yet.</td></tr>
             <?php endif; ?>
           </tbody>
         </table>
@@ -71,27 +57,17 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
     <div class="col-md-4">
       <h4>Book New Wash</h4>
       <form method="POST" action="book.php">
-        <div class="mb-2">
-          <label class="form-label">Car Model</label>
-          <input type="text" name="car_model" class="form-control" required>
-        </div>
-        <div class="mb-2">
-          <label class="form-label">License Plate</label>
-          <input type="text" name="license_plate" class="form-control" required>
-        </div>
-        <div class="mb-2">
-          <label class="form-label">Service</label>
+        <div class="mb-2"><label>Car Model</label><input type="text" name="car_model" class="form-control" required></div>
+        <div class="mb-2"><label>License Plate</label><input type="text" name="license_plate" class="form-control" required></div>
+        <div class="mb-2"><label>Service</label>
           <select name="service_id" class="form-select">
             <?php foreach($services as $s): ?>
               <option value="<?= $s['id'] ?>"><?= htmlspecialchars($s['service_name']) ?> - $<?= $s['price'] ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="mb-2">
-          <label class="form-label">Booking Time</label>
-          <input type="datetime-local" name="booking_time" class="form-control" required>
-        </div>
-        <div class="d-grid"><button class="btn btn-primary">Book</button></div>
+        <div class="mb-2"><label>Booking Time</label><input type="datetime-local" name="booking_time" class="form-control" required></div>
+        <div class="d-grid mt-2"><button class="btn btn-primary">Book Now</button></div>
       </form>
     </div>
   </div>

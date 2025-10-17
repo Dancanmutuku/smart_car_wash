@@ -1,9 +1,13 @@
 body {
-    background-color: #f7f8fa;
+    background-color: #f8f9fa;
 }
-.card {
-    border-radius: 12px;
+.card, .table {
+    border-radius: 10px;
 }
-.btn {
-    border-radius: 6px;
+.navbar-brand {
+    font-weight: bold;
+}
+.card h3 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
 }
