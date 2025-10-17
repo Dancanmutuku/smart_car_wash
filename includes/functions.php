@@ -1,25 +1,23 @@
 <?php
-// Start session if not already started
 if (session_status() == PHP_SESSION_NONE) session_start();
 
-/**
- * Clean input to prevent XSS
- */
+// --- Clean Input ---
 function clean_input($data) {
     return htmlspecialchars(stripslashes(trim($data)));
 }
 
-/**
- * Check if user is logged in
- */
+// --- Check Login ---
 function is_logged_in() {
     return isset($_SESSION['user']);
 }
 
-/**
- * Check if current user is admin
- */
+// --- Admin Check ---
 function is_admin() {
-    return isset($_SESSION['user']) && $_SESSION['user']['role'] === 'admin';
+    return is_logged_in() && $_SESSION['user']['role'] === 'admin';
+}
+
+// --- Staff Check ---
+function is_staff() {
+    return is_logged_in() && $_SESSION['user']['role'] === 'staff';
 }
 ?>

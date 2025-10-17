@@ -3,7 +3,7 @@ try {
     $db = new PDO('sqlite:' . __DIR__ . '/../database/car_wash.db');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Create tables
+    // --- Users Table ---
     $db->exec("CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -13,15 +13,24 @@ try {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
+    // --- Services Table ---
     $db->exec("CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        service_name TEXT,
+        service_name TEXT NOT NULL,
         description TEXT,
         price REAL,
         duration INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
+    // Ensure 'category' column exists in services
+    $columns = $db->query("PRAGMA table_info(services)")->fetchAll(PDO::FETCH_ASSOC);
+    $column_names = array_column($columns, 'name');
+    if (!in_array('category', $column_names)) {
+        $db->exec("ALTER TABLE services ADD COLUMN category TEXT DEFAULT 'General'");
+    }
+
+    // --- Bookings Table ---
     $db->exec("CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -33,22 +42,40 @@ try {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
-    // Insert default admin if missing
+    // Ensure 'staff_id' column exists in bookings
+    $columns = $db->query("PRAGMA table_info(bookings)")->fetchAll(PDO::FETCH_ASSOC);
+    $column_names = array_column($columns, 'name');
+    if (!in_array('staff_id', $column_names)) {
+        $db->exec("ALTER TABLE bookings ADD COLUMN staff_id INTEGER");
+    }
+
+    // --- Feedback Table ---
+    $db->exec("CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER,
+        user_id INTEGER,
+        rating INTEGER,
+        comment TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    // --- Insert default admin if missing ---
     $exists = $db->query("SELECT COUNT(*) as c FROM users WHERE role='admin'")->fetch(PDO::FETCH_ASSOC)['c'];
     if ($exists == 0) {
         $password = password_hash('admin123', PASSWORD_DEFAULT);
         $db->exec("INSERT INTO users (name, email, password, role) VALUES ('Admin', 'admin@wash.com', '$password', 'admin')");
     }
 
-    // Sample services
+    // --- Sample Services if empty ---
     $count = $db->query("SELECT COUNT(*) as c FROM services")->fetch(PDO::FETCH_ASSOC)['c'];
     if ($count == 0) {
-        $db->exec("INSERT INTO services (service_name, description, price, duration) VALUES
-            ('Basic Wash', 'Exterior wash and dry', 5.00, 15),
-            ('Standard Wash', 'Exterior + interior vacuum', 10.00, 30),
-            ('Deluxe Wash', 'Full clean + wax', 20.00, 45)");
+        $db->exec("INSERT INTO services (service_name, description, price, duration, category) VALUES
+            ('Basic Wash', 'Exterior wash and dry', 5.00, 15, 'Exterior'),
+            ('Standard Wash', 'Exterior + interior vacuum', 10.00, 30, 'Interior'),
+            ('Deluxe Wash', 'Full clean + wax', 20.00, 45, 'Full')");
     }
+
 } catch (PDOException $e) {
-    echo 'DB Error: ' . $e->getMessage();
+    echo "DB Error: " . $e->getMessage();
 }
 ?>
