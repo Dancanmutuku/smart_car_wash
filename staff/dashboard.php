@@ -68,7 +68,7 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <div class="container my-5">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">👨‍🔧 Staff Dashboard</h2>
+        <h2 class="fw-bold">Staff Dashboard</h2>
         <a href="../logout.php" class="btn btn-danger btn-sm">Logout</a>
     </div>
 
