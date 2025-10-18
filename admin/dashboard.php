@@ -73,6 +73,16 @@ $all_users = $db->query("SELECT * FROM users ORDER BY created_at DESC")->fetchAl
 $all_services = $db->query("SELECT * FROM services ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 $all_staff = $db->query("SELECT * FROM users WHERE role='staff'")->fetchAll(PDO::FETCH_ASSOC);
 
+// --- Fetch Feedback ---
+$feedback_data = $db->query("
+    SELECT f.*, u.name AS customer_name, b.service_id, s.service_name
+    FROM feedback f
+    LEFT JOIN users u ON f.user_id = u.id
+    LEFT JOIN bookings b ON f.booking_id = b.id
+    LEFT JOIN services s ON b.service_id = s.id
+    ORDER BY f.created_at DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+
 // --- Prepare Chart Data ---
 $service_counts = [];
 $staff_counts = [];
@@ -82,13 +92,12 @@ foreach($recent_bookings as $b){
     $staff_counts[$staff_name] = ($staff_counts[$staff_name] ?? 0) + 1;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Modern Admin Dashboard</title>
+<title>Admin Dashboard - Smart Car Wash</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -136,34 +145,35 @@ canvas { background: #fff; border-radius: 15px; padding: 15px; }
     </div>
 </div>
 
-<!-- Modals -->
+<!-- Chart Modals -->
 <div class="modal fade" id="statusModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content p-3">
 <div class="modal-header"><h5>Booking Status</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-<div class="modal-body"><canvas id="statusChartModal" height="250"></canvas></div>
-</div></div></div>
+<div class="modal-body"><canvas id="statusChartModal" height="250"></canvas></div></div></div></div>
 
 <div class="modal fade" id="serviceModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content p-3">
 <div class="modal-header"><h5>Bookings per Service</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-<div class="modal-body"><canvas id="serviceChartModal" height="250"></canvas></div>
-</div></div></div>
+<div class="modal-body"><canvas id="serviceChartModal" height="250"></canvas></div></div></div></div>
 
 <div class="modal fade" id="staffModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content p-3">
 <div class="modal-header"><h5>Bookings per Staff</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-<div class="modal-body"><canvas id="staffChartModal" height="250"></canvas></div>
-</div></div></div>
+<div class="modal-body"><canvas id="staffChartModal" height="250"></canvas></div></div></div></div>
 
 <!-- Tabs -->
 <ul class="nav nav-tabs" id="adminTabs">
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#bookings">Bookings</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#services">Services</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#users">Users</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#feedback">Feedback</button></li>
 </ul>
 
 <div class="tab-content mt-3">
-<!-- Bookings -->
+
+<!-- Bookings Tab -->
 <div class="tab-pane fade show active" id="bookings">
 <div class="table-responsive"><table class="table table-striped table-bordered align-middle">
-<thead><tr><th>ID</th><th>Customer</th><th>Service</th><th>Category</th><th>Car</th><th>Status</th><th>Booking Time</th><th>Assign Staff</th></tr></thead>
+<thead><tr>
+<th>ID</th><th>Customer</th><th>Service</th><th>Category</th><th>Car</th><th>Status</th><th>Booking Time</th><th>Assign Staff</th><th>Feedback</th>
+</tr></thead>
 <tbody>
 <?php foreach($recent_bookings as $b): ?>
 <tr>
@@ -192,12 +202,37 @@ canvas { background: #fff; border-radius: 15px; padding: 15px; }
 <button name="update_booking" class="btn btn-sm btn-primary w-100">Update</button>
 </form>
 </td>
+<td>
+<?php 
+$booking_feedback = array_filter($feedback_data, fn($f) => $f['booking_id'] == $b['id']); 
+?>
+<?php if(!empty($booking_feedback)): ?>
+<button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#feedbackModal<?= $b['id'] ?>">View Feedback</button>
+
+<div class="modal fade" id="feedbackModal<?= $b['id'] ?>" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content p-3">
+<div class="modal-header">
+<h5>Feedback for Booking #<?= $b['id'] ?></h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<?php foreach($booking_feedback as $fb): ?>
+<p><strong><?= htmlspecialchars($fb['customer_name']) ?></strong> (Rating: <?= $fb['rating'] ?>/5)</p>
+<p><?= nl2br(htmlspecialchars($fb['comment'])) ?></p><hr>
+<?php endforeach; ?>
+</div></div></div></div>
+<?php else: ?>
+<span class="text-muted">No feedback</span>
+<?php endif; ?>
+</td>
 </tr>
 <?php endforeach; ?>
-</tbody></table></div>
+</tbody>
+</table></div>
 </div>
 
-<!-- Services -->
+<!-- Services Tab -->
 <div class="tab-pane fade" id="services">
 <form method="POST" class="row g-2 mb-3">
 <div class="col-md-3"><input type="text" name="service_name" class="form-control" placeholder="Service Name" required></div>
@@ -224,7 +259,7 @@ canvas { background: #fff; border-radius: 15px; padding: 15px; }
 </tbody></table></div>
 </div>
 
-<!-- Users -->
+<!-- Users Tab -->
 <div class="tab-pane fade" id="users">
 <form method="POST" class="row g-2 mb-3 align-items-end">
 <div class="col-md-3"><input type="text" name="new_name" class="form-control" placeholder="Full Name" required></div>
@@ -254,8 +289,30 @@ canvas { background: #fff; border-radius: 15px; padding: 15px; }
 </tbody></table></div>
 </div>
 
+<!-- Feedback Tab -->
+<div class="tab-pane fade" id="feedback">
+<div class="table-responsive"><table class="table table-striped table-bordered">
+<thead class="table-dark">
+<tr><th>ID</th><th>Booking</th><th>Customer</th><th>Service</th><th>Rating</th><th>Comment</th><th>Created At</th></tr>
+</thead>
+<tbody>
+<?php foreach($feedback_data as $f): ?>
+<tr>
+<td><?= $f['id'] ?></td>
+<td><?= $f['booking_id'] ?></td>
+<td><?= htmlspecialchars($f['customer_name']) ?></td>
+<td><?= htmlspecialchars($f['service_name'] ?? 'Unknown') ?></td>
+<td><?= $f['rating'] ?>/5</td>
+<td><?= nl2br(htmlspecialchars($f['comment'])) ?></td>
+<td><?= $f['created_at'] ?></td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table></div>
 </div>
-</div>
+
+</div> <!-- /tab-content -->
+</div> <!-- /container -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -269,3 +326,4 @@ document.getElementById('staffModal').addEventListener('shown.bs.modal', functio
 </script>
 </body>
 </html>
+
