@@ -3,16 +3,16 @@ session_start();
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-// ✅ Restrict access to logged-in staff only
+// Restrict access to staff only
 if (!is_logged_in() || !is_staff()) {
     header('Location: ../index.php');
     exit;
 }
 
-// ✅ Handle booking status updates
+// Handle booking status updates
 if (isset($_POST['update_booking'])) {
     $booking_id = (int)$_POST['booking_id'];
-    $status = clean_input($_POST['status']);
+    $status = clean_input($_POST['update_booking']); // Button value: completed / not attended
     $staff_id = $_SESSION['user']['id'];
 
     $stmt = $db->prepare("
@@ -31,8 +31,12 @@ if (isset($_POST['update_booking'])) {
     exit;
 }
 
-// ✅ Fetch bookings assigned to this staff member
-$stmt = $db->prepare("
+// Handle search/filter
+$search_name = $_GET['search_name'] ?? '';
+$filter_status = $_GET['filter_status'] ?? '';
+
+// Fetch bookings assigned to this staff member with optional search/filter
+$query = "
     SELECT 
         b.*, 
         u.name AS customer_name, 
@@ -42,9 +46,24 @@ $stmt = $db->prepare("
     LEFT JOIN users u ON b.user_id = u.id
     LEFT JOIN services s ON b.service_id = s.id
     WHERE b.staff_id = :staff_id
-    ORDER BY b.booking_time DESC
-");
-$stmt->execute([':staff_id' => $_SESSION['user']['id']]);
+";
+
+$params = [':staff_id' => $_SESSION['user']['id']];
+
+if (!empty($search_name)) {
+    $query .= " AND u.name LIKE :search_name";
+    $params[':search_name'] = "%$search_name%";
+}
+
+if (!empty($filter_status)) {
+    $query .= " AND b.status = :filter_status";
+    $params[':filter_status'] = $filter_status;
+}
+
+$query .= " ORDER BY b.booking_time DESC";
+
+$stmt = $db->prepare($query);
+$stmt->execute($params);
 $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
@@ -56,15 +75,10 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <style>
     body { background-color: #f8f9fa; }
     .card { border-radius: 10px; }
-    .badge-status {
-        text-transform: capitalize;
-        font-size: 0.85rem;
-        padding: 0.4em 0.8em;
-    }
+    .badge-status { text-transform: capitalize; font-size: 0.85rem; padding: 0.4em 0.8em; }
 </style>
 </head>
 <body>
-
 <div class="container my-5">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -74,10 +88,37 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <!-- Success Message -->
     <?php if (!empty($_SESSION['success_message'])): ?>
-        <div class="alert alert-success">
+        <div class="alert alert-success alert-dismissible fade show">
             <?= htmlspecialchars($_SESSION['success_message']); unset($_SESSION['success_message']); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>
+
+    <!-- Search and Filter -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <form method="GET" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label for="search_name" class="form-label">Search by Customer Name</label>
+                    <input type="text" name="search_name" id="search_name" class="form-control" value="<?= htmlspecialchars($search_name) ?>">
+                </div>
+                <div class="col-md-3">
+                    <label for="filter_status" class="form-label">Filter by Status</label>
+                    <select name="filter_status" id="filter_status" class="form-select">
+                        <option value="">All</option>
+                        <option value="completed" <?= $filter_status === 'completed' ? 'selected' : '' ?>>Completed</option>
+                        <option value="not attended" <?= $filter_status === 'not attended' ? 'selected' : '' ?>>Not Completed</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Apply</button>
+                </div>
+                <div class="col-md-2">
+                    <a href="dashboard.php" class="btn btn-secondary w-100">Reset</a>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Assigned Bookings Table -->
     <div class="card shadow-sm">
@@ -99,17 +140,16 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </thead>
                     <tbody>
                         <?php if ($bookings): ?>
-                            <?php foreach ($bookings as $b): ?>
-                                <?php 
-                                    $status = $b['status'] ?? 'pending';
-                                    $badgeClass = match($status) {
-                                        'approved' => 'bg-info',
-                                        'completed' => 'bg-success',
-                                        'not attended' => 'bg-warning text-dark',
-                                        'rejected' => 'bg-danger',
-                                        default => 'bg-secondary'
-                                    };
-                                ?>
+                            <?php foreach ($bookings as $b): 
+                                $status = $b['status'] ?? 'pending';
+                                $badgeClass = match($status) {
+                                    'completed' => 'bg-success',
+                                    'not attended' => 'bg-warning text-dark',
+                                    'approved' => 'bg-info',
+                                    'rejected' => 'bg-danger',
+                                    default => 'bg-secondary'
+                                };
+                            ?>
                                 <tr>
                                     <td><?= $b['id'] ?></td>
                                     <td><?= htmlspecialchars($b['customer_name'] ?? 'Unknown') ?></td>
@@ -119,19 +159,10 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td><span class="badge badge-status <?= $badgeClass ?>"><?= $status ?></span></td>
                                     <td><?= htmlspecialchars($b['booking_time'] ?? '') ?></td>
                                     <td>
-                                        <form method="POST" class="d-flex flex-column align-items-center gap-2">
+                                        <form method="POST" class="d-flex justify-content-center gap-2">
                                             <input type="hidden" name="booking_id" value="<?= $b['id'] ?>">
-                                            <select name="status" class="form-select form-select-sm w-auto">
-                                                <?php 
-                                                $options = ['approved', 'completed', 'not attended', 'rejected'];
-                                                foreach ($options as $option):
-                                                ?>
-                                                    <option value="<?= $option ?>" <?= $status == $option ? 'selected' : '' ?>>
-                                                        <?= ucfirst($option) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <button name="update_booking" class="btn btn-primary btn-sm">Update</button>
+                                            <button type="submit" name="update_booking" value="completed" class="btn btn-success btn-sm">Completed</button>
+                                            <button type="submit" name="update_booking" value="not attended" class="btn btn-warning btn-sm">Not Completed</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -145,6 +176,6 @@ $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 </div>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

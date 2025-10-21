@@ -41,9 +41,13 @@ if(isset($_POST['submit_feedback'])){
     $rating = (int)$_POST['rating'];
     $comment = clean_input($_POST['comment']);
     $stmt = $db->prepare("INSERT INTO feedback (booking_id, user_id, rating, comment) VALUES (:bid, :uid, :rating, :comment)");
-    $stmt->execute([':bid'=>$booking_id, ':uid'=>$user_id, ':rating'=>$rating, ':comment'=>$comment]);
+    $stmt->execute([':bid'=>$booking_id, ':uid'=>$user_id, ':comment'=>$comment, ':rating'=>$rating]);
     header('Location: dashboard.php'); exit;
 }
+
+// --- Handle search/filter ---
+$filter_status = $_GET['filter_status'] ?? '';
+$search_service = $_GET['search_service'] ?? '';
 
 // --- Fetch bookings with assigned staff ---
 $stmt = $db->prepare("
@@ -52,13 +56,24 @@ $stmt = $db->prepare("
     LEFT JOIN services s ON b.service_id = s.id
     LEFT JOIN users st ON b.staff_id = st.id
     WHERE b.user_id=:uid
+    ".($filter_status ? " AND b.status=:status" : "")."
+    ".($search_service ? " AND s.service_name LIKE :search" : "")."
     ORDER BY b.created_at DESC
 ");
-$stmt->execute([':uid'=>$user_id]);
+$params = [':uid'=>$user_id];
+if($filter_status) $params[':status']=$filter_status;
+if($search_service) $params[':search']='%'.$search_service.'%';
+$stmt->execute($params);
 $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // --- Fetch services for new bookings ---
 $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
+
+// --- Compute KPIs ---
+$total = count($bookings);
+$completed = count(array_filter($bookings, fn($b)=>$b['status']=='completed'));
+$pending = count(array_filter($bookings, fn($b)=>in_array($b['status'], ['pending','approved'])));
+$cancelled = count(array_filter($bookings, fn($b)=>$b['status']=='cancelled'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -67,13 +82,54 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Customer Dashboard</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+    body { background-color: #f8f9fa; }
+    .card { border-radius: 10px; }
+    .badge-status { text-transform: capitalize; font-size: 0.85rem; padding: 0.4em 0.8em; }
+    .clickable { cursor: pointer; }
+</style>
 </head>
 <body>
 <?php include('../includes/topbar.php'); ?>
 
 <div class="container py-4">
     <h2 class="text-center mb-4">Welcome, <?= htmlspecialchars($user['name']) ?></h2>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm text-white bg-primary">
+                <div class="card-body">
+                    <h6>Total Bookings</h6>
+                    <h3><?= $total ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm text-white bg-success">
+                <div class="card-body">
+                    <h6>Completed</h6>
+                    <h3><?= $completed ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm text-white bg-warning">
+                <div class="card-body">
+                    <h6>Pending</h6>
+                    <h3><?= $pending ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm text-white bg-danger">
+                <div class="card-body">
+                    <h6>Cancelled</h6>
+                    <h3><?= $cancelled ?></h3>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="row g-4">
         <!-- Profile & New Booking -->
@@ -114,7 +170,7 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
                         <label class="form-label">Service</label>
                         <select name="service_id" class="form-select" required>
                             <?php foreach($services as $s): ?>
-                                <option value="<?= $s['id'] ?>"><?= htmlspecialchars($s['service_name']) ?> - $<?= $s['price'] ?></option>
+                                <option value="<?= $s['id'] ?>"><?= htmlspecialchars($s['service_name']) ?> - Kes.<?= $s['price'] ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -130,6 +186,26 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
         <!-- Booking History -->
         <div class="col-lg-8">
             <h4>Your Bookings</h4>
+
+            <!-- Filter/Search -->
+            <form class="row g-2 mb-3" method="GET">
+                <div class="col-md-4">
+                    <input type="text" name="search_service" class="form-control" placeholder="Search by service" value="<?= htmlspecialchars($search_service) ?>">
+                </div>
+                <div class="col-md-3">
+                    <select name="filter_status" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="pending" <?= $filter_status=='pending'?'selected':'' ?>>Pending</option>
+                        <option value="approved" <?= $filter_status=='approved'?'selected':'' ?>>Approved</option>
+                        <option value="completed" <?= $filter_status=='completed'?'selected':'' ?>>Completed</option>
+                        <option value="cancelled" <?= $filter_status=='cancelled'?'selected':'' ?>>Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                </div>
+            </form>
+
             <div class="table-responsive">
                 <table class="table table-striped table-bordered align-middle">
                     <thead class="table-dark">
@@ -144,55 +220,69 @@ $services = $db->query("SELECT * FROM services")->fetchAll(PDO::FETCH_ASSOC);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if($bookings): foreach($bookings as $b): ?>
-                        <tr>
+                        <?php if($bookings): foreach($bookings as $b): 
+                            $statusClass = match($b['status']){
+                                'completed' => 'bg-success text-white',
+                                'pending' => 'bg-warning text-dark',
+                                'approved' => 'bg-info text-white',
+                                'cancelled' => 'bg-danger text-white',
+                                default => 'bg-secondary text-white'
+                            };
+                        ?>
+                        <tr class="clickable" data-bs-toggle="collapse" data-bs-target="#bookingDetails<?= $b['id'] ?>">
                             <td><?= $b['id'] ?></td>
                             <td><?= htmlspecialchars($b['service_name']) ?></td>
                             <td><?= htmlspecialchars($b['car_model']) ?> (<?= htmlspecialchars($b['license_plate']) ?>)</td>
-                            <td><?= htmlspecialchars($b['status']) ?></td>
+                            <td><span class="badge <?= $statusClass ?>"><?= ucfirst($b['status']) ?></span></td>
                             <td><?= $b['booking_time'] ?></td>
                             <td><?= htmlspecialchars($b['staff_name'] ?? 'Not assigned') ?></td>
                             <td>
                                 <?php if($b['status']=='pending' || $b['status']=='approved'): ?>
-                                    <a href="?cancel=<?= $b['id'] ?>" class="btn btn-sm btn-danger mb-1" onclick="return confirm('Cancel this booking?')">Cancel</a>
-                                <?php endif; ?>
-                                <?php if($b['status']=='completed'): ?>
-                                    <button class="btn btn-sm btn-info mb-1" data-bs-toggle="modal" data-bs-target="#feedbackModal<?= $b['id'] ?>">Feedback</button>
-
-                                    <!-- Feedback Modal -->
-                                    <div class="modal fade" id="feedbackModal<?= $b['id'] ?>" tabindex="-1">
-                                      <div class="modal-dialog">
-                                        <div class="modal-content">
-                                          <form method="POST">
-                                            <div class="modal-header">
-                                              <h5 class="modal-title">Feedback for Booking #<?= $b['id'] ?></h5>
-                                              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <input type="hidden" name="booking_id" value="<?= $b['id'] ?>">
-                                                <div class="mb-2">
-                                                    <label class="form-label">Rating (1-5)</label>
-                                                    <input type="number" name="rating" min="1" max="5" class="form-control" required>
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="form-label">Comment</label>
-                                                    <textarea name="comment" class="form-control" rows="3"></textarea>
-                                                </div>
-                                                <div class="mb-1"><strong>Staff:</strong> <?= htmlspecialchars($b['staff_name'] ?? 'Not assigned') ?></div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="submit" name="submit_feedback" class="btn btn-primary">Submit</button>
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                            </div>
-                                          </form>
-                                        </div>
-                                      </div>
-                                    </div>
+                                    <a href="?cancel=<?= $b['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Cancel this booking?')">Cancel</a>
+                                <?php elseif($b['status']=='completed'): ?>
+                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#feedbackModal<?= $b['id'] ?>">Feedback</button>
                                 <?php endif; ?>
                             </td>
                         </tr>
+                        <tr class="collapse" id="bookingDetails<?= $b['id'] ?>">
+                            <td colspan="7">
+                                <strong>Staff:</strong> <?= htmlspecialchars($b['staff_name'] ?? 'Not assigned') ?><br>
+                                <strong>License Plate:</strong> <?= htmlspecialchars($b['license_plate']) ?><br>
+                                <strong>Service Category:</strong> <?= htmlspecialchars($b['category'] ?? 'General') ?>
+                            </td>
+                        </tr>
+
+                        <!-- Feedback Modal -->
+                        <div class="modal fade" id="feedbackModal<?= $b['id'] ?>" tabindex="-1">
+                          <div class="modal-dialog">
+                            <div class="modal-content">
+                              <form method="POST">
+                                <div class="modal-header">
+                                  <h5 class="modal-title">Feedback for Booking #<?= $b['id'] ?></h5>
+                                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <input type="hidden" name="booking_id" value="<?= $b['id'] ?>">
+                                    <div class="mb-2">
+                                        <label class="form-label">Rating (1-5)</label>
+                                        <input type="number" name="rating" min="1" max="5" class="form-control" required>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Comment</label>
+                                        <textarea name="comment" class="form-control" rows="3"></textarea>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="submit" name="submit_feedback" class="btn btn-primary">Submit</button>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
+
                         <?php endforeach; else: ?>
-                        <tr><td colspan="7" class="text-center">No bookings yet.</td></tr>
+                        <tr><td colspan="7" class="text-center">No bookings found.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
