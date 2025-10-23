@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - Smart Car Wash</title>
+<title>Login - Downtown Car Wash</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="container d-flex justify-content-center align-items-center" style="min-height:100vh;">
     <div class="card shadow p-4 w-100" style="max-width:400px; border-radius:1rem;">
-        <h3 class="text-center mb-4">Smart Car Wash</h3>
+        <h3 class="text-center mb-4">Downtown Car Wash</h3>
 
         <?php if ($message): ?>
             <div class="alert alert-danger"><?= htmlspecialchars($message) ?></div>
