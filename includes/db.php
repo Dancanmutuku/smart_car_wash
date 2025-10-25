@@ -59,6 +59,24 @@ try {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
 
+    // --- Logs Table ---
+    $db->exec("CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        action TEXT,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    // --- Activity Table ---
+    $db->exec("CREATE TABLE IF NOT EXISTS activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        activity_type TEXT,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
     // --- Insert default admin if missing ---
     $exists = $db->query("SELECT COUNT(*) as c FROM users WHERE role='admin'")->fetch(PDO::FETCH_ASSOC)['c'];
     if ($exists == 0) {
